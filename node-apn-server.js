@@ -9,9 +9,9 @@ var apns  = require('apn'),
 var _ = require('underscore')._;
 var certificates_base_path = path.join(__dirname, "certificates");
 
-function SendDeviceFeedback(app, device) {
+function SendDeviceFeedback(args) {
   // Build the post string from an object
-  var post_data = querystring.stringify({app: app, token: device});
+  var post_data = querystring.stringify(args);
 
   // An object of options to indicate where to post to
   var post_options = {
@@ -52,7 +52,7 @@ function initialize_apps() {
         		if (n < 16) out[i] = "0" + n.toString(16);
         		else out[i] = n.toString(16);
         	}
-          SendDeviceFeedback(app, out.join(""));
+          SendDeviceFeedback({app: app, token: out.join("")});
     		}
     	}
     }
@@ -71,9 +71,8 @@ function initialize_apps() {
       return function(time, device) {
     		console.log("Feedback, time: " + time + " Device: " + util.inspect(device) );
     		console.log(device.hexToken());
-    		console.log(arguments.callee.caller.toString());
         console.log(app);
-        SendDeviceFeedback(app, device.hexToken())
+        SendDeviceFeedback({app: app, token: device.hexToken(), time: time})
       }
   	}
 
