@@ -45,8 +45,14 @@ function initialize_apps() {
       return function(errorCode, note){
     		console.log("Push notification error, error code: " + errorCode + " Note: " + util.inspect(note) );
     		if (errorCode == (8||"8")) {
-      		var device = new apns.device(node["device"]["token"], false)
-          SendDeviceFeedback(app, device.hexToken());
+    		  var out = [],
+        		len = note["device"]["token"].length;
+        	for (var i = 0; i < len; i++) {
+        		n = note["device"]["token"][i];
+        		if (n < 16) out[i] = "0" + n.toString(16);
+        		else out[i] = n.toString(16);
+        	}
+          SendDeviceFeedback(app, out.join(""));
     		}
     	}
     }
