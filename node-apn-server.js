@@ -41,16 +41,21 @@ function SendDeviceFeedback(app, device) {
 //parse certificates folder and search for complete apps
 function initialize_apps() {
   function apn_app_options(app) {
-    var apnErrorCallback = function(errorCode, note){
-  		console.log("Push notification error, error code: " + errorCode + " Note: " + util.inspect(note) );
-  	}
-
+    var apnErrorCallback = function(app) {
+      return function(errorCode, note){
+    		console.log("Push notification error, error code: " + errorCode + " Note: " + util.inspect(note) );
+    		if (errorCode == (8||"8")) {
+      		var device = new Device(node["device"]["token"], false)
+          SendDeviceFeedback(app, device.hexToken());
+    		}
+    	}
+    }
     return options = { cert: path.join(certificates_base_path, app, "cert.pem") /* Certificate file */
 	            , key:  path.join(certificates_base_path, app, "key.pem")  /* Key file */
 	            , gateway: 'gateway.push.apple.com' /* gateway address */
 	            , port: 2195 /* gateway port */
 	            , enhanced: true /* enable enhanced format */
-	            , errorCallback: apnErrorCallback /* Callback when error occurs */
+	            , errorCallback: apnErrorCallback(app) /* Callback when error occurs */
 	            , cacheLength: 5 /* Notifications to cache for error purposes */
 	            };    
   }
