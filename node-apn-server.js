@@ -3,10 +3,40 @@ var apns  = require('apn'),
 	qs    = require('qs')
 	util  = require('util'),
 	path  = require("path"),
-	fs    = require('fs');
-
+	fs    = require('fs'),
+	url = require('url'),
+	querystring = require('querystring');
 var _ = require('underscore')._;
 var certificates_base_path = path.join(__dirname, "certificates");
+
+function SendDeviceFeedback(app, device) {
+  // Build the post string from an object
+  var post_data = querystring.stringify({app: app, token: device});
+
+  // An object of options to indicate where to post to
+  var post_options = {
+      host: 'localhost',
+      port: '3000',
+      path: '/expired_iphone',
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': post_data.length
+      }
+  };
+
+  // Set up the request
+  var post_req = http.request(post_options, function(res) {
+      res.setEncoding('utf8');
+      res.on('data', function (chunk) {
+          console.log('Response: ' + chunk);
+      });
+  });
+
+  // post the data
+  post_req.write(post_data);
+  post_req.end();
+}
 
 //parse certificates folder and search for complete apps
 function initialize_apps() {
@@ -25,6 +55,26 @@ function initialize_apps() {
 	            };    
   }
   
+  function apn_feedback_options(app) {
+    var apnFeedbackCallback = function(app){
+      return function(time, device) {
+    		console.log("Feedback, time: " + time + " Device: " + util.inspect(device) );
+    		console.log(device.hexToken());
+    		console.log(arguments.callee.caller.toString());
+        console.log(app);
+        SendDeviceFeedback(app, device.hexToken())
+      }
+  	}
+
+    return options =   { cert: path.join(certificates_base_path, app, "cert.pem") /* Certificate file */
+  	            , key:  path.join(certificates_base_path, app, "key.pem")  /* Key file */
+                , address: 'feedback.push.apple.com' /* feedback address */
+                , port: 2196 /* feedback port */
+                , feedback: apnFeedbackCallback(app) /* callback function */
+                , interval: 3600 /* query interval in seconds */
+                };
+  }
+  
   var apps_collection = {};
   var apps = _.select(fs.readdirSync(certificates_base_path), function(certificate_folder){ return /^[a-z][a-z0-9]+$/.test(certificate_folder) });
   _.each(apps, function(app){ 
@@ -36,7 +86,9 @@ function initialize_apps() {
     } else if (!_.include(certificates, "key.pem")) {
       console.log("Not loading " + app + " because key is missing");
     } else {
-      apps_collection[app] = new apns.connection(apn_app_options(app));
+      apps_collection[app] = {}
+      apps_collection[app]["app"] = new apns.connection(apn_app_options(app));
+      apps_collection[app]["feedback"] = new apns.feedback(apn_feedback_options(app));
     }
   });
     
@@ -88,7 +140,7 @@ http.createServer(function (req, res) {
 		if (params.app && _.include(_.keys(apnsConnections), params.app)) {
 		  console.log("app does exist!");
   		var note = createNotification(params);
-  		apnsConnections[params.app.toLowerCase()].sendNotification(note);
+  		apnsConnections[params.app.toLowerCase()]["app"].sendNotification(note);
   		
   		// return a 200 response
   		res.writeHead(200, {'Content-Type': 'text/plain'});
