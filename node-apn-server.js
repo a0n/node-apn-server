@@ -157,7 +157,6 @@ http.createServer(function (req, res) {
 	// when the requests's end event is emitted
 	// handle sending the notification and response
 	req.on('end', function(){
-		console.log(data);
 		// if the request isn't a POST, return a 405
 		if(method != "POST"){
 			res.writeHead(405, {'Content-Type': 'text/plain'});
@@ -172,7 +171,8 @@ http.createServer(function (req, res) {
   	  params.app = params.app.toLowerCase();
   	  if (!_.include(_.keys(apnsConnections), params.app)) {
     	  res.writeHead(405, {'Content-Type': 'text/plain'});
-  			res.end("App not found.\r\n");
+  			res.end("App not found." + params.app + "\r\n");
+  			console.log("App not found: " + params.app);
   			return;
     	}
   	} else {
@@ -182,26 +182,27 @@ http.createServer(function (req, res) {
   	}
   	
   	if (params.environment) {
-  	  params.environment = params.app.toLowerCase();
+  	  params.environment = params.environment.toLowerCase();
   	  if (!_.include(_.keys(apnsConnections[params.app]), params.environment)) {
     	  res.writeHead(405, {'Content-Type': 'text/plain'});
-  			res.end("Environment not found.\r\n");
+  			res.end("Environment not found: "+ params.environment+"\r\n");
+  			console.log("Environment not found: "+ params.environment);
   			return;
     	}
   	} else {
   	  res.writeHead(405, {'Content-Type': 'text/plain'});
-			res.end("Please provide an Environment.\r\n");
+			res.end("Please provide an Environment\r\n");
 			return;
   	}
   	
-	  console.log("app does exist!");
 		var note = createNotification(params);
-		console.log(note);
+		console.log("sending note to: " + params.app + " in " + params.environment + " environment.")
 		apnsConnections[params.app][params.environment]["app"].sendNotification(note);
 		
 		// return a 200 response
 		res.writeHead(200, {'Content-Type': 'text/plain'});
 		res.end("Notification sent for" + params.app + " " + params.environment + ".\r\n");
+		console.log("Notification sent for" + params.app + " " + params.environment);
 		return;
 	
 		
