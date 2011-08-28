@@ -196,6 +196,7 @@ http.createServer(function (req, res) {
   	
 	  console.log("app does exist!");
 		var note = createNotification(params);
+		console.log(note);
 		apnsConnections[params.app][params.environment]["app"].sendNotification(note);
 		
 		// return a 200 response
