@@ -5,9 +5,12 @@ var apns  = require('apn'),
 	path  = require("path"),
 	fs    = require('fs'),
 	url = require('url'),
-	querystring = require('querystring');
-var _ = require('underscore')._;
+	querystring = require('querystring'),
+	_ = require('underscore')._;
+	
 var certificates_base_path = path.join(__dirname, "certificates");
+var environments = ["development", "production"]
+
 
 function SendDeviceFeedback(args) {
   // Build the post string from an object
@@ -40,7 +43,7 @@ function SendDeviceFeedback(args) {
 
 //parse certificates folder and search for complete apps
 function initialize_apps() {
-  function apn_app_options(app) {
+  function apn_app_options(app, env) {
     var apnErrorCallback = function(app) {
       return function(errorCode, note){
     		console.log("Push notification error, error code: " + errorCode + " Note: " + util.inspect(note) );
@@ -56,9 +59,16 @@ function initialize_apps() {
     		}
     	}
     }
-    return options = { cert: path.join(certificates_base_path, app, "cert.pem") /* Certificate file */
-	            , key:  path.join(certificates_base_path, app, "key.pem")  /* Key file */
-	            , gateway: 'gateway.push.apple.com' /* gateway address */
+    
+    if (env == "development") {
+     var gateway = "gateway.sandbox.push.apple.com";
+    } else {
+      var gateway = "gateway.push.apple.com";
+    }
+    
+    return options = { cert: path.join(certificates_base_path, app, env, "cert.pem") /* Certificate file */
+	            , key:  path.join(certificates_base_path, app, env, "key.pem")  /* Key file */
+	            , gateway: gateway /* gateway address */
 	            , port: 2195 /* gateway port */
 	            , enhanced: true /* enable enhanced format */
 	            , errorCallback: apnErrorCallback(app) /* Callback when error occurs */
@@ -66,7 +76,7 @@ function initialize_apps() {
 	            };    
   }
   
-  function apn_feedback_options(app) {
+  function apn_feedback_options(app, env) {
     var apnFeedbackCallback = function(app){
       return function(time, device) {
     		console.log("Feedback, time: " + time + " Device: " + util.inspect(device) );
@@ -75,9 +85,15 @@ function initialize_apps() {
         SendDeviceFeedback({app: app, token: device.hexToken(), time: time})
       }
   	}
-
-    return options =   { cert: path.join(certificates_base_path, app, "cert.pem") /* Certificate file */
-  	            , key:  path.join(certificates_base_path, app, "key.pem")  /* Key file */
+  	
+    if (env == "development") {
+     var gateway = "feedback.sandbox.push.apple.com";
+    } else {
+      var gateway = "feedback.push.apple.com";
+    }
+    
+    return options =   { cert: path.join(certificates_base_path, app, env, "cert.pem") /* Certificate file */
+  	            , key:  path.join(certificates_base_path, app, env, "key.pem")  /* Key file */
                 , address: 'feedback.push.apple.com' /* feedback address */
                 , port: 2196 /* feedback port */
                 , feedback: apnFeedbackCallback(app) /* callback function */
@@ -88,25 +104,28 @@ function initialize_apps() {
   var apps_collection = {};
   var apps = _.select(fs.readdirSync(certificates_base_path), function(certificate_folder){ return /^[a-z][a-z0-9]+$/.test(certificate_folder) });
   _.each(apps, function(app){ 
-    var certificates = _.select(fs.readdirSync(path.join(certificates_base_path, app)), function(certificate){ return /^[a-z][a-z0-9]+\.pem$/.test(certificate) });
-    if (!_.include(certificates, "key.pem") && !_.include(certificates, "cert.pem")) {
-      console.log("Not loading " + app + " because key and certs are missing");
-    } else if (!_.include(certificates, "cert.pem")) {  
-      console.log("Not loading " + app + " because cert is missing");
-    } else if (!_.include(certificates, "key.pem")) {
-      console.log("Not loading " + app + " because key is missing");
-    } else {
-      apps_collection[app] = {}
-      apps_collection[app]["app"] = new apns.connection(apn_app_options(app));
-      apps_collection[app]["feedback"] = new apns.feedback(apn_feedback_options(app));
-    }
+    _.each(environments, function(env){
+      var certificates = _.select(fs.readdirSync(path.join(certificates_base_path, app, env)), function(certificate){ return /^[a-z][a-z0-9]+\.pem$/.test(certificate) });
+      if (!_.include(certificates, "key.pem") && !_.include(certificates, "cert.pem")) {
+        console.log("Not loading " + app + " " + env + " because key and certs are missing");
+      } else if (!_.include(certificates, "cert.pem")) {  
+        console.log("Not loading " + app + " " + env + " because cert is missing");
+      } else if (!_.include(certificates, "key.pem")) {
+        console.log("Not loading " + app + " " + env + " because key is missing");
+      } else {
+        apps_collection[app] = {};
+        apps_collection[app][env] = {};
+        apps_collection[app][env]["app"] = new apns.connection(apn_app_options(app, env));
+        apps_collection[app][env]["feedback"] = new apns.feedback(apn_feedback_options(app, env));
+      }
+    });
   });
     
   return apps_collection;
 }
 
 var apnsConnections = initialize_apps();
-console.log(apnsConnections);
+console.log(util.inspect(apnsConnections));
 
 
 // create a Notification object from application/x-url-encoded data
@@ -144,25 +163,46 @@ http.createServer(function (req, res) {
 			res.writeHead(405, {'Content-Type': 'text/plain'});
 			res.end("Request method: " + method + " not supported.\r\n");
 			return;
-		}
+		} 
   	var params = qs.parse(data);
-  	console.log(params);
-		if (params.app && _.include(_.keys(apnsConnections), params.app)) {
-		  console.log("app does exist!");
-  		var note = createNotification(params);
-  		apnsConnections[params.app.toLowerCase()]["app"].sendNotification(note);
-  		
-  		// return a 200 response
-  		res.writeHead(200, {'Content-Type': 'text/plain'});
-  		res.end("Notification sent for" + params.app + ".\r\n");
-  		return;
-		} else {
-		  console.log("app does not exists!");
-		  // return a 200 response
-  		res.writeHead(405, {'Content-Type': 'text/plain'});
-  		res.end("Sorry! No Certificates for this app installed.\r\n");
-  		return;
-		}
+  	
+  	
+  	//check if app and enviroment exists
+  	if (params.app) {
+  	  params.app = params.app.toLowerCase();
+  	  if (!_.include(_.keys(apnsConnections), params.app)) {
+    	  res.writeHead(405, {'Content-Type': 'text/plain'});
+  			res.end("App not found.\r\n");
+  			return;
+    	}
+  	} else {
+  	  res.writeHead(405, {'Content-Type': 'text/plain'});
+			res.end("Please provide an App.\r\n");
+			return;
+  	}
+  	
+  	if (params.environment) {
+  	  params.environment = params.app.toLowerCase();
+  	  if (!_.include(_.keys(apnsConnections[params.app]), params.environment)) {
+    	  res.writeHead(405, {'Content-Type': 'text/plain'});
+  			res.end("Environment not found.\r\n");
+  			return;
+    	}
+  	} else {
+  	  res.writeHead(405, {'Content-Type': 'text/plain'});
+			res.end("Please provide an Environment.\r\n");
+			return;
+  	}
+  	
+	  console.log("app does exist!");
+		var note = createNotification(params);
+		apnsConnections[params.app][params.environment]["app"].sendNotification(note);
+		
+		// return a 200 response
+		res.writeHead(200, {'Content-Type': 'text/plain'});
+		res.end("Notification sent for" + params.app + " " + params.environment + ".\r\n");
+		return;
+	
 		
 	});
 }).listen(8124, "127.0.0.1");
