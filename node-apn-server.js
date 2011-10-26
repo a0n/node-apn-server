@@ -31,9 +31,14 @@ function SendDeviceFeedback(args) {
   // Set up the request
   var post_req = http.request(post_options, function(res) {
       res.setEncoding('utf8');
-      res.on('data', function (chunk) {
-          console.log('Response: ' + chunk);
+      
+      res.on('error', function(err) {
+        console.log(err);
       });
+        
+      res.on('data', function (chunk) {
+        console.log('Response: ' + chunk);
+      });    
   });
 
   // post the data
